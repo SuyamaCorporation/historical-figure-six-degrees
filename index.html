@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>歴史人物 六次の隔たり</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+<script>
+function escapeHtml(str){return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
+</script>
+
+<div class="max-w-4xl mx-auto p-4">
+  <h1 class="text-3xl font-bold text-center text-indigo-400 mb-2">歴史人物 六次の隔たり</h1>
+  <p class="text-center text-gray-400 mb-6">2人の歴史人物を最少ステップで繋ごう</p>
+
+  <div id="game-area">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div class="bg-gray-800 rounded-xl p-4 border border-indigo-500">
+        <div class="text-xs text-indigo-400 mb-1">スタート</div>
+        <div id="start-name" class="text-xl font-bold text-indigo-300"></div>
+        <div id="start-info" class="text-xs text-gray-400 mt-1"></div>
+      </div>
+      <div class="bg-gray-800 rounded-xl p-4 border border-violet-500">
+        <div class="text-xs text-violet-400 mb-1">ゴール</div>
+        <div id="goal-name" class="text-xl font-bold text-violet-300"></div>
+        <div id="goal-info" class="text-xs text-gray-400 mt-1"></div>
+      </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-xl p-4 mb-4">
+      <div class="flex justify-between items-center mb-3">
+        <span class="text-sm text-gray-400">現在地: <span id="current-display" class="text-cyan-300 font-bold"></span></span>
+        <span class="text-sm text-gray-400">ステップ: <span id="step-count" class="text-yellow-300 font-bold">0</span> / 6</span>
+      </div>
+      <div id="path-display" class="flex flex-wrap gap-2 mb-3"></div>
+      <div class="text-sm text-gray-400 mb-2">次の人物を選択（関係のある人物）:</div>
+      <div id="choices" class="grid grid-cols-2 md:grid-cols-3 gap-2"></div>
+    </div>
+
+    <div id="hint-box" class="bg-gray-800 rounded-xl p-4 mb-4 hidden">
+      <div class="text-sm text-cyan-400 font-bold mb-2">ヒント: 最短経路</div>
+      <div id="hint-content" class="text-sm text-gray-300"></div>
+    </div>
+
+    <div id="result-box" class="bg-gray-800 rounded-xl p-4 mb-4 hidden">
+      <div id="result-title" class="text-xl font-bold text-center mb-2"></div>
+      <div id="result-detail" class="text-sm text-gray-300 text-center"></div>
+    </div>
+
+    <div class="flex gap-3 flex-wrap justify-center">
+      <button onclick="showHint()" class="bg-cyan-700 hover:bg-cyan-600 px-4 py-2 rounded-lg text-sm">ヒントを見る</button>
+      <button onclick="newGame()" class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg text-sm">新しいゲーム</button>
+      <button onclick="showShortestPath()" class="bg-violet-700 hover:bg-violet-600 px-4 py-2 rounded-lg text-sm">最短経路を表示</button>
+    </div>
+  </div>
+
+  <div class="mt-6 bg-gray-800 rounded-xl p-4">
+    <div class="text-sm text-gray-400">スコア: <span id="score" class="text-yellow-300 font-bold">0</span> pt &nbsp;|&nbsp;
+      最高: <span id="best-score" class="text-green-300 font-bold">0</span> pt</div>
+  </div>
+</div>
+
+<script>
+function escapeHtml(str){return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');}
+
+// 歴史人物データベース（人物ID、名前、時代、関係）
+const FIGURES = {
+  napoleon: { name: 'ナポレオン・ボナパルト', era: '1769-1821', field: '軍人・皇帝', desc: 'フランス皇帝、欧州制覇' },
+  wellington: { name: 'ウェリントン公爵', era: '1769-1852', field: '軍人', desc: 'ワーテルローでナポレオンを破る' },
+  nelson: { name: 'ホレーショ・ネルソン', era: '1758-1805', field: '海軍提督', desc: 'トラファルガー海戦の英雄' },
+  pitt: { name: 'ウィリアム・ピット（子）', era: '1759-1806', field: '政治家', desc: 'イギリス首相、反ナポレオン連合' },
+  darwin: { name: 'チャールズ・ダーウィン', era: '1809-1882', field: '科学者', desc: '進化論を提唱' },
+  huxley: { name: 'トーマス・ヘンリー・ハクスリー', era: '1825-1895', field: '科学者', desc: 'ダーウィンの番犬' },
+  lyell: { name: 'チャールズ・ライエル', era: '1797-1875', field: '地質学者', desc: '地質学の父、ダーウィンに影響' },
+  faraday: { name: 'マイケル・ファラデー', era: '1791-1867', field: '科学者', desc: '電磁誘導を発見' },
+  maxwell: { name: 'ジェームズ・クラーク・マクスウェル', era: '1831-1879', field: '物理学者', desc: '電磁気学を統一' },
+  edison: { name: 'トーマス・エジソン', era: '1847-1931', field: '発明家', desc: '電球・蓄音機を発明' },
+  tesla: { name: 'ニコラ・テスラ', era: '1856-1943', field: '発明家', desc: '交流電流システム、エジソンの競争相手' },
+  einstein: { name: 'アルベルト・アインシュタイン', era: '1879-1955', field: '物理学者', desc: '相対性理論を発表' },
+  curie: { name: 'マリー・キュリー', era: '1867-1934', field: '科学者', desc: 'ノーベル賞2回受賞' },
+  planck: { name: 'マックス・プランク', era: '1858-1947', field: '物理学者', desc: '量子論の父' },
+  bohr: { name: 'ニールス・ボーア', era: '1885-1962', field: '物理学者', desc: '原子モデルを提唱' },
+  lincoln: { name: 'エイブラハム・リンカーン', era: '1809-1865', field: '政治家', desc: 'アメリカ16代大統領、奴隷解放' },
+  grant: { name: 'ユリシーズ・グラント', era: '1822-1885', field: '軍人・大統領', desc: '南北戦争北軍司令官' },
+  lee: { name: 'ロバート・E・リー', era: '1807-1870', field: '軍人', desc: '南北戦争南軍司令官' },
+  washington: { name: 'ジョージ・ワシントン', era: '1732-1799', field: '政治家', desc: 'アメリカ初代大統領' },
+  jefferson: { name: 'トーマス・ジェファーソン', era: '1743-1826', field: '政治家', desc: '独立宣言起草者、3代大統領' },
+  franklin: { name: 'ベンジャミン・フランクリン', era: '1706-1790', field: '政治家・科学者', desc: '建国の父、電気の研究' },
+  voltaire: { name: 'ヴォルテール', era: '1694-1778', field: '哲学者', desc: 'フランス啓蒙主義の代表' },
+  rousseau: { name: 'ジャン＝ジャック・ルソー', era: '1712-1778', field: '哲学者', desc: '社会契約論' },
+  montesquieu: { name: 'モンテスキュー', era: '1689-1755', field: '哲学者', desc: '法の精神、三権分立' },
+  newton: { name: 'アイザック・ニュートン', era: '1643-1727', field: '科学者', desc: '万有引力・微積分を発見' },
+  leibniz: { name: 'ゴットフリート・ライプニッツ', era: '1646-1716', field: '数学者', desc: '微積分を独立発見、二進法' },
+  locke: { name: 'ジョン・ロック', era: '1632-1704', field: '哲学者', desc: '社会契約論の先駆者' },
+  shakespeare: { name: 'ウィリアム・シェイクスピア', era: '1564-1616', field: '文学者', desc: '英文学の巨人' },
+  bacon: { name: 'フランシス・ベーコン', era: '1561-1626', field: '哲学者', desc: '帰納法・科学的方法' },
+  galileo: { name: 'ガリレオ・ガリレイ', era: '1564-1642', field: '科学者', desc: '地動説の擁護、望遠鏡改良' },
+  kepler: { name: 'ヨハネス・ケプラー', era: '1571-1630', field: '天文学者', desc: '惑星運動の法則' },
+  copernicus: { name: 'ニコラウス・コペルニクス', era: '1473-1543', field: '天文学者', desc: '地動説を提唱' },
+  michelangelo: { name: 'ミケランジェロ', era: '1475-1564', field: '芸術家', desc: 'ルネサンスの巨匠、システィナ礼拝堂' },
+  davinci: { name: 'レオナルド・ダ・ヴィンチ', era: '1452-1519', field: '芸術家・科学者', desc: 'モナリザ・万能の天才' },
+  machiavelli: { name: 'ニッコロ・マキャヴェッリ', era: '1469-1527', field: '政治思想家', desc: '君主論の著者' },
+  erasmus: { name: 'デジデリウス・エラスムス', era: '1466-1536', field: '人文主義者', desc: '人文主義の王子' },
+  luther: { name: 'マルティン・ルター', era: '1483-1546', field: '宗教改革者', desc: '宗教改革の父' },
+  calvin: { name: 'ジャン・カルヴァン', era: '1509-1564', field: '宗教改革者', desc: 'プロテスタント神学' },
+  marx: { name: 'カール・マルクス', era: '1818-1883', field: '思想家', desc: '共産主義理論、資本論' },
+  engels: { name: 'フリードリヒ・エンゲルス', era: '1820-1895', field: '思想家', desc: 'マルクスの共著者' },
+  bismarck: { name: 'オットー・フォン・ビスマルク', era: '1815-1898', field: '政治家', desc: 'ドイツ統一の鉄血宰相' },
+  victoria: { name: 'ヴィクトリア女王', era: '1819-1901', field: '君主', desc: '大英帝国最盛期の女王' },
+  disraeli: { name: 'ベンジャミン・ディズレーリ', era: '1804-1881', field: '政治家', desc: 'イギリス首相、帝国主義推進' },
+  gladstone: { name: 'ウィリアム・グラッドストン', era: '1809-1898', field: '政治家', desc: 'イギリス首相、自由主義' },
+};
+
+// 関係グラフ（無向）
+const EDGES = [
+  ['napoleon','wellington'],['napoleon','nelson'],['napoleon','pitt'],
+  ['napoleon','davinci'],// 時代は違うがナポレオンはダヴィンチに敬意
+  ['wellington','pitt'],['nelson','pitt'],
+  ['darwin','huxley'],['darwin','lyell'],['darwin','hooker'],
+  ['lyell','faraday'],['faraday','maxwell'],['maxwell','einstein'],
+  ['maxwell','tesla'],['edison','tesla'],['einstein','curie'],
+  ['einstein','planck'],['einstein','bohr'],['planck','bohr'],
+  ['curie','planck'],['bohr','heisenberg'],
+  ['lincoln','grant'],['lincoln','lee'],['grant','lee'],
+  ['washington','jefferson'],['jefferson','franklin'],['washington','franklin'],
+  ['voltaire','rousseau'],['voltaire','montesquieu'],['rousseau','montesquieu'],
+  ['voltaire','franklin'],['franklin','jefferson'],
+  ['newton','leibniz'],['newton','locke'],['locke','voltaire'],
+  ['shakespeare','bacon'],['bacon','galileo'],
+  ['galileo','kepler'],['kepler','copernicus'],
+  ['michelangelo','davinci'],['davinci','machiavelli'],
+  ['machiavelli','erasmus'],['erasmus','luther'],['luther','calvin'],
+  ['marx','engels'],['marx','bismarck'],// 同時代
+  ['bismarck','victoria'],['victoria','disraeli'],['victoria','gladstone'],
+  ['disraeli','gladstone'],
+  ['huxley','darwin'],['faraday','maxwell'],
+  ['pitt','wellington'],['lincoln','jefferson'], // 思想的継承
+  ['napoleon','bismarck'], // 影響
+  ['edison','einstein'], // 交流
+  ['franklin','newton'], // 科学的影響
+  ['galileo','newton'],
+  ['bacon','newton'],['locke','jefferson'],
+  ['darwin','marx'], // 思想的影響
+  ['einstein','bohr'],['curie','bohr'],
+];
+
+// グラフをadjリストへ変換
+const graph = {};
+Object.keys(FIGURES).forEach(id => { graph[id] = []; });
+EDGES.forEach(([a,b]) => {
+  if(graph[a] && graph[b]) {
+    if(!graph[a].includes(b)) graph[a].push(b);
+    if(!graph[b].includes(a)) graph[b].push(a);
+  }
+});
+
+// BFS最短経路
+function bfs(start, goal) {
+  if(start === goal) return [start];
+  const queue = [[start]];
+  const visited = new Set([start]);
+  while(queue.length > 0) {
+    const path = queue.shift();
+    const node = path[path.length-1];
+    for(const neighbor of (graph[node]||[])) {
+      if(!visited.has(neighbor)) {
+        const newPath = [...path, neighbor];
+        if(neighbor === goal) return newPath;
+        visited.add(neighbor);
+        queue.push(newPath);
+      }
+    }
+  }
+  return null;
+}
+
+// ゲーム状態
+let startId, goalId, currentId, playerPath, steps, score, bestScore;
+
+function loadScore() {
+  const s = JSON.parse(localStorage.getItem('six-degrees-score')||'{"score":0,"best":0}');
+  score = s.score; bestScore = s.best;
+  document.getElementById('score').textContent = score;
+  document.getElementById('best-score').textContent = bestScore;
+}
+function saveScore() {
+  if(score > bestScore) bestScore = score;
+  localStorage.setItem('six-degrees-score', JSON.stringify({score, best: bestScore}));
+  document.getElementById('score').textContent = score;
+  document.getElementById('best-score').textContent = bestScore;
+}
+
+// ゲーム用のペア（接続可能なもの）
+const GAME_PAIRS = [
+  ['napoleon','einstein'],['washington','darwin'],['shakespeare','newton'],
+  ['marx','edison'],['galileo','lincoln'],['copernicus','marx'],
+  ['davinci','faraday'],['luther','franklin'],['voltaire','tesla'],
+  ['newton','bismarck'],['michelangelo','curie'],['kepler','jefferson'],
+];
+
+function newGame() {
+  const pair = GAME_PAIRS[Math.floor(Math.random()*GAME_PAIRS.length)];
+  startId = pair[0]; goalId = pair[1];
+  currentId = startId;
+  playerPath = [startId];
+  steps = 0;
+  document.getElementById('hint-box').classList.add('hidden');
+  document.getElementById('result-box').classList.add('hidden');
+  document.getElementById('step-count').textContent = '0';
+  renderGame();
+}
+
+function renderGame() {
+  const sf = FIGURES[startId], gf = FIGURES[goalId], cf = FIGURES[currentId];
+  document.getElementById('start-name').textContent = sf.name;
+  document.getElementById('start-info').textContent = sf.era + ' | ' + sf.field;
+  document.getElementById('goal-name').textContent = gf.name;
+  document.getElementById('goal-info').textContent = gf.era + ' | ' + gf.field;
+  document.getElementById('current-display').textContent = cf.name;
+
+  // パス表示
+  const pathEl = document.getElementById('path-display');
+  pathEl.innerHTML = playerPath.map((id,i) => {
+    const f = FIGURES[id];
+    const isLast = i === playerPath.length-1;
+    return `<span class="px-2 py-1 rounded text-xs ${isLast?'bg-indigo-600':'bg-gray-700'}">${escapeHtml(f.name)}</span>${i<playerPath.length-1?'<span class="text-gray-500">→</span>':''}`;
+  }).join('');
+
+  // 選択肢
+  const neighbors = graph[currentId]||[];
+  const available = neighbors.filter(n => !playerPath.includes(n));
+  const choices = document.getElementById('choices');
+  choices.innerHTML = '';
+  available.forEach(id => {
+    const f = FIGURES[id];
+    if(!f) return;
+    const btn = document.createElement('button');
+    btn.className = 'bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg p-2 text-left text-sm transition-colors';
+    btn.innerHTML = `<div class="font-bold text-cyan-300">${escapeHtml(f.name)}</div><div class="text-xs text-gray-400">${escapeHtml(f.era)} | ${escapeHtml(f.field)}</div>`;
+    btn.onclick = () => selectFigure(id);
+    choices.appendChild(btn);
+  });
+  if(available.length === 0 && currentId !== goalId) {
+    choices.innerHTML = '<div class="text-red-400 text-sm col-span-3">これ以上進む経路がありません。新しいゲームを開始してください。</div>';
+  }
+}
+
+function selectFigure(id) {
+  playerPath.push(id);
+  currentId = id;
+  steps++;
+  document.getElementById('step-count').textContent = steps;
+
+  if(id === goalId) {
+    // ゴール！
+    const shortest = bfs(startId, goalId);
+    const shortestLen = shortest ? shortest.length-1 : steps;
+    const diff = steps - shortestLen;
+    let pts = 0;
+    if(diff === 0) pts = 100;
+    else if(diff === 1) pts = 70;
+    else if(diff <= 3) pts = 40;
+    else pts = 10;
+    score += pts;
+    saveScore();
+
+    const rb = document.getElementById('result-box');
+    rb.classList.remove('hidden');
+    document.getElementById('result-title').innerHTML = `<span class="text-green-400">🎉 ゴール！</span>`;
+    document.getElementById('result-detail').textContent = `${steps}ステップで到達！（最短: ${shortestLen}ステップ）+${pts}pt`;
+    document.getElementById('choices').innerHTML = '';
+    return;
+  }
+
+  if(steps >= 6) {
+    // 失敗
+    const shortest = bfs(startId, goalId);
+    const rb = document.getElementById('result-box');
+    rb.classList.remove('hidden');
+    document.getElementById('result-title').innerHTML = `<span class="text-red-400">ゲームオーバー</span>`;
+    const pathStr = shortest ? shortest.map(id=>FIGURES[id]?.name||id).join(' → ') : '経路なし';
+    document.getElementById('result-detail').textContent = `6ステップ以内に到達できませんでした。最短経路: ${pathStr}`;
+    document.getElementById('choices').innerHTML = '';
+    return;
+  }
+
+  renderGame();
+}
+
+function showHint() {
+  const shortest = bfs(startId, goalId);
+  const hb = document.getElementById('hint-box');
+  hb.classList.remove('hidden');
+  if(shortest) {
+    document.getElementById('hint-content').textContent = '最短経路（' + (shortest.length-1) + 'ステップ）: ' + shortest.map(id=>FIGURES[id]?.name||id).join(' → ');
+  } else {
+    document.getElementById('hint-content').textContent = '直接の接続経路が見つかりません';
+  }
+}
+
+function showShortestPath() { showHint(); }
+
+loadScore();
+newGame();
+</script>
+</body>
+</html>
